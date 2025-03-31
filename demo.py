@@ -11,18 +11,20 @@ import sys
 import argparse
 from typing import List, Dict, Any
 
-from rag_testing.core.base import Document
+from rag_testing.core.base import Document, DocumentProcessor
 from rag_testing.config.models import (
     RAGConfig,
     EmbeddingConfig,
     VectorStoreConfig,
     RetrievalConfig,
     EvaluationConfig,
+    DocumentProcessorConfig,
     EmbeddingModelType,
     VectorStoreType,
     RetrievalStrategyType
 )
-from rag_testing.core.pipeline import create_pipeline_from_config
+from rag_testing.core.pipeline import create_pipeline_from_config, SimpleRAGPipeline
+from rag_testing.data.processors import TextSplitter, TextCleaner, CompositeProcessor
 from rag_testing.examples.embedding_tfidf import (
     run_embedding_tfidf_example,
     create_sample_documents,
@@ -71,6 +73,40 @@ def main():
         help="Custom query to test (optional)"
     )
     
+    # Add document processing options
+    parser.add_argument(
+        "--process",
+        action="store_true",
+        help="Enable document processing"
+    )
+    parser.add_argument(
+        "--chunk-size",
+        type=int,
+        default=1000,
+        help="Size of document chunks"
+    )
+    parser.add_argument(
+        "--chunk-overlap",
+        type=int,
+        default=200,
+        help="Overlap between chunks"
+    )
+    parser.add_argument(
+        "--clean-text",
+        action="store_true",
+        help="Enable text cleaning"
+    )
+    parser.add_argument(
+        "--lowercase",
+        action="store_true",
+        help="Convert text to lowercase"
+    )
+    parser.add_argument(
+        "--remove-urls",
+        action="store_true",
+        help="Remove URLs from text"
+    )
+    
     args = parser.parse_args()
     
     # Create configuration with custom parameters
@@ -83,9 +119,50 @@ def main():
     config.retrieval.top_k = args.top_k
     config.embedding.model_name = args.model
     
+    # Add document processor configuration if enabled
+    if args.process:
+        config.document_processor = DocumentProcessorConfig(
+            chunk_size=args.chunk_size,
+            chunk_overlap=args.chunk_overlap,
+            processors=["text_cleaner", "text_splitter"] if args.clean_text else ["text_splitter"],
+            processor_kwargs={
+                "lowercase": args.lowercase,
+                "remove_urls": args.remove_urls
+            }
+        )
+    
     # Create and set up pipeline
     print(f"Creating RAG pipeline with {args.strategy} retrieval strategy...")
     pipeline = create_pipeline_from_config(config)
+    
+    # If processing is enabled, create document processors manually
+    # This demonstrates how to create processors outside of the config
+    if args.process:
+        processors = []
+        
+        if args.clean_text:
+            processors.append(TextCleaner(
+                lowercase=args.lowercase,
+                remove_urls=args.remove_urls
+            ))
+        
+        processors.append(TextSplitter(
+            chunk_size=args.chunk_size,
+            chunk_overlap=args.chunk_overlap
+        ))
+        
+        document_processor = CompositeProcessor(processors)
+        pipeline.document_processor = document_processor
+        
+        print(f"Document processing enabled:")
+        print(f"  - Chunk size: {args.chunk_size}")
+        print(f"  - Chunk overlap: {args.chunk_overlap}")
+        if args.clean_text:
+            print(f"  - Text cleaning enabled")
+            if args.lowercase:
+                print(f"  - Lowercase conversion enabled")
+            if args.remove_urls:
+                print(f"  - URL removal enabled")
     
     # Create and index documents
     print("Creating and indexing sample documents...")
