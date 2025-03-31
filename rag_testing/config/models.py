@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, validator
 from typing import Any, Dict, List, Optional, Union, Type
 from enum import Enum
 
@@ -15,6 +15,7 @@ class VectorStoreType(str, Enum):
     """Enumeration of supported vector store types."""
     CHROMA = "chroma"
     CUSTOM = "custom"
+
 
 
 class RetrievalStrategyType(str, Enum):
@@ -69,12 +70,41 @@ class EvaluationConfig(BaseModel):
 
 class RAGConfig(BaseModel):
     """Configuration for the entire RAG pipeline."""
-    embedding: EmbeddingConfig = Field(..., description="Embedding model configuration")
-    vector_store: VectorStoreConfig = Field(..., description="Vector store configuration")
+    embedding: Optional[EmbeddingConfig] = Field(None, description="Embedding model configuration")
+    vector_store: Optional[VectorStoreConfig] = Field(None, description="Vector store configuration")
     retrieval: RetrievalConfig = Field(..., description="Retrieval strategy configuration")
     document_processor: Optional[DocumentProcessorConfig] = Field(None, description="Document processor configuration")
     evaluation: Optional[EvaluationConfig] = Field(None, description="Evaluation configuration")
     
     # Pipeline name for identification
     name: str = Field("default", description="Name of the RAG pipeline")
-    description: Optional[str] = Field(None, description="Description of the pipeline") 
+    description: Optional[str] = Field(None, description="Description of the pipeline")
+    
+    @validator('embedding', 'vector_store', always=True)
+    def validate_components(cls, v, values, **kwargs):
+        field_name = kwargs.get('field_name')
+        retrieval_strategy = values.get('retrieval', None)
+        
+        if retrieval_strategy is None:
+            return v
+            
+        strategy_type = retrieval_strategy.strategy_type
+        
+        # Embedding-based retrieval needs embedding and vector_store
+        if strategy_type == RetrievalStrategyType.EMBEDDING:
+            if field_name == 'embedding' and v is None:
+                raise ValueError("Embedding configuration is required for embedding-based retrieval")
+            if field_name == 'vector_store' and v is None:
+                raise ValueError("Vector store configuration is required for embedding-based retrieval")
+        
+        # TFIDF-based retrieval doesn't need embedding or vector_store
+        # So no validation needed for TFIDF
+        
+        # Hybrid retrieval needs both embedding, vector_store, and TFIDF components
+        if strategy_type == RetrievalStrategyType.HYBRID:
+            if field_name == 'embedding' and v is None:
+                raise ValueError("Embedding configuration is required for hybrid retrieval")
+            if field_name == 'vector_store' and v is None:
+                raise ValueError("Vector store configuration is required for hybrid retrieval")
+        
+        return v 

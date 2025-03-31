@@ -5,6 +5,7 @@ from tqdm import tqdm
 
 from rag_testing.core.base import (
     Document, 
+    SearchResult,
     EmbeddingModel, 
     VectorStore, 
     RetrievalStrategy, 
@@ -51,6 +52,20 @@ class SimpleRAGPipeline(RAGPipeline):
             "evaluation_results": {}
         }
     
+    def process_documents(self, documents: List[Document]) -> List[Document]:
+        """
+        Process documents if a document processor is available.
+        
+        Args:
+            documents: Documents to process
+            
+        Returns:
+            Processed documents
+        """
+        if self.document_processor:
+            return self.document_processor.process(documents)
+        return documents
+    
     def index(self, documents: List[Document]) -> None:
         """
         Index documents for retrieval.
@@ -61,9 +76,7 @@ class SimpleRAGPipeline(RAGPipeline):
         start_time = time.time()
         
         # Process documents if processor is provided
-        processed_docs = documents
-        if self.document_processor:
-            processed_docs = self.document_processor.process(documents)
+        processed_docs = self.process_documents(documents)
         
         # Set up the retrieval strategy with processed documents
         self.retrieval_strategy.setup(processed_docs)
@@ -73,7 +86,17 @@ class SimpleRAGPipeline(RAGPipeline):
         self.statistics["num_documents"] = len(processed_docs)
         self.indexed = True
     
-    def retrieve(self, query: str, k: int = 5) -> List[Document]:
+    def ingest_documents(self, documents: List[Document]) -> None:
+        """
+        Ingest documents into the pipeline.
+        Alias for index() method.
+        
+        Args:
+            documents: Documents to ingest
+        """
+        self.index(documents)
+    
+    def retrieve(self, query: str, k: int = 5) -> List[SearchResult]:
         """
         Retrieve documents for a query.
         
@@ -82,7 +105,7 @@ class SimpleRAGPipeline(RAGPipeline):
             k: Number of documents to retrieve
             
         Returns:
-            List of retrieved documents
+            List of search results with documents and scores
         """
         if not self.indexed:
             raise ValueError("Documents must be indexed before retrieval")
@@ -90,7 +113,22 @@ class SimpleRAGPipeline(RAGPipeline):
         start_time = time.time()
         
         # Use the retrieval strategy to get documents
-        results = self.retrieval_strategy.retrieve(query, k=k)
+        doc_results = self.retrieval_strategy.retrieve(query, k=k)
+        
+        # Convert to SearchResult objects
+        results = []
+        for doc in doc_results:
+            # Determine score field based on retrieval strategy type
+            if "combined_score" in doc.metadata:
+                score_field = "combined_score"
+            elif "similarity" in doc.metadata:
+                score_field = "similarity"
+            else:
+                score_field = "distance"
+                
+            # Create SearchResult from Document
+            result = SearchResult.from_document(doc, score_field=score_field)
+            results.append(result)
         
         # Update statistics
         self.statistics["retrieval_times"].append(time.time() - start_time)
@@ -118,7 +156,8 @@ class SimpleRAGPipeline(RAGPipeline):
                 continue
             
             # Retrieve documents for the query
-            retrieved_docs = self.retrieve(query)
+            search_results = self.retrieve(query)
+            retrieved_docs = [result.document for result in search_results]
             
             # Calculate metrics
             for metric in self.evaluation_metrics:
@@ -192,10 +231,10 @@ def create_pipeline_from_config(config: RAGConfig) -> RAGPipeline:
         Configured RAG pipeline
     """
     # Create embedding model
-    embedding_model = get_embedding_model(config.embedding)
+    embedding_model = get_embedding_model(config.embedding) if config.embedding else None
     
     # Create vector store
-    vector_store = get_vector_store(config.vector_store)
+    vector_store = get_vector_store(config.vector_store) if config.vector_store else None
     
     # Create retrieval strategy
     retrieval_strategy = get_retrieval_strategy(

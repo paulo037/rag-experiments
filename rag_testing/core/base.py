@@ -11,6 +11,49 @@ class Document(BaseModel):
     id: Optional[str] = Field(None, description="Document ID")
 
 
+class SearchResult(BaseModel):
+    """Class to store search results with document and score information."""
+    document: Document = Field(..., description="The retrieved document")
+    score: float = Field(..., description="The relevance score")
+    embedding_score: Optional[float] = Field(None, description="Embedding similarity score (for hybrid retrieval)")
+    tfidf_score: Optional[float] = Field(None, description="TF-IDF similarity score (for hybrid retrieval)")
+
+    @classmethod
+    def from_document(cls, doc: Document, score_field: str = "distance") -> "SearchResult":
+        """
+        Create a SearchResult from a Document with score in metadata.
+        
+        Args:
+            doc: Document with score in metadata
+            score_field: Name of the metadata field containing the score
+            
+        Returns:
+            SearchResult instance
+        """
+        # For embedding retrieve where lower distance is better
+        if score_field == "distance":
+            # Distance to similarity conversion
+            score = 1.0 - doc.metadata.get(score_field, 0.0)
+        else:
+            # For TF-IDF where higher similarity is better
+            score = doc.metadata.get(score_field, 0.0)
+            
+        # Check for hybrid retrieval fields
+        embedding_score = doc.metadata.get("embedding_score", None)
+        tfidf_score = doc.metadata.get("tfidf_score", None)
+        combined_score = doc.metadata.get("combined_score", None)
+        
+        # Use combined score if available, otherwise use the converted score
+        final_score = combined_score if combined_score is not None else score
+        
+        return cls(
+            document=doc,
+            score=final_score,
+            embedding_score=embedding_score,
+            tfidf_score=tfidf_score
+        )
+
+
 class DocumentLoader(ABC):
     """Interface for document loading components."""
     
@@ -164,7 +207,7 @@ class RAGPipeline(ABC):
         pass
     
     @abstractmethod
-    def retrieve(self, query: str, k: int = 5) -> List[Document]:
+    def retrieve(self, query: str, k: int = 5) -> List[SearchResult]:
         """
         Retrieve documents for a query.
         
@@ -173,7 +216,7 @@ class RAGPipeline(ABC):
             k: Number of documents to retrieve
             
         Returns:
-            List of retrieved documents
+            List of search results with documents and scores
         """
         pass
     
@@ -189,4 +232,26 @@ class RAGPipeline(ABC):
         Returns:
             Dictionary of evaluation metrics
         """
-        pass 
+        pass
+    
+    def process_documents(self, documents: List[Document]) -> List[Document]:
+        """
+        Process documents if a document processor is available.
+        
+        Args:
+            documents: Documents to process
+            
+        Returns:
+            Processed documents
+        """
+        return documents
+    
+    def ingest_documents(self, documents: List[Document]) -> None:
+        """
+        Ingest documents into the pipeline.
+        Alias for index() method.
+        
+        Args:
+            documents: Documents to ingest
+        """
+        self.index(documents) 

@@ -1,27 +1,30 @@
 import re
 from typing import List, Dict, Any, Optional, Callable
 import uuid
+import tiktoken  # Added for token-level chunking
 
 from rag_testing.core.base import Document, DocumentProcessor
 
 
 class TextSplitter(DocumentProcessor):
-    """Split documents into chunks based on size."""
+    """Split documents into chunks based on token size."""
     
-    def __init__(self, chunk_size: int = 1000, chunk_overlap: int = 200):
+    def __init__(self, chunk_size: int = 1000, chunk_overlap: int = 200, encoding_name: str = "cl100k_base"):
         """
         Initialize the text splitter.
         
         Args:
-            chunk_size: The target size of each document chunk
-            chunk_overlap: The overlap between chunks
+            chunk_size: The target size of each document chunk in tokens
+            chunk_overlap: The overlap between chunks in tokens
+            encoding_name: The name of the tiktoken encoding to use
         """
         self.chunk_size = chunk_size
         self.chunk_overlap = chunk_overlap
+        self.encoding = tiktoken.get_encoding(encoding_name)
     
     def process(self, documents: List[Document]) -> List[Document]:
         """
-        Split documents into chunks.
+        Split documents into chunks based on token count.
         
         Args:
             documents: List of documents to process
@@ -38,25 +41,27 @@ class TextSplitter(DocumentProcessor):
             if not content.strip():
                 continue
             
-            # Simple character-level chunking
-            start = 0
+            # Token-level chunking - simplified and optimized
+            tokens = self.encoding.encode(content)
             chunks = []
             
-            while start < len(content):
-                end = min(start + self.chunk_size, len(content))
+            # Return the document as is if it's smaller than chunk_size
+            if len(tokens) <= self.chunk_size:
+                chunks.append(doc)
+                chunked_documents.extend(chunks)
+                continue
                 
-                # If we're not at the beginning or end, try to find a sensible boundary
-                if start > 0 and end < len(content):
-                    # Look for a newline or period to break on
-                    last_newline = content.rfind('\n', start, end)
-                    last_period = content.rfind('. ', start, end)
-                    
-                    if last_newline > start + self.chunk_size // 2:
-                        end = last_newline + 1
-                    elif last_period > start + self.chunk_size // 2:
-                        end = last_period + 2
+            start_token = 0
+            
+            while start_token < len(tokens):
+                # Calculate end position
+                end_token = min(start_token + self.chunk_size, len(tokens))
                 
-                chunk_content = content[start:end]
+                # Get the chunk content
+                chunk_tokens = tokens[start_token:end_token]
+                chunk_content = self.encoding.decode(chunk_tokens)
+                
+                # Create a unique ID for the chunk
                 chunk_id = f"{doc.id}_{len(chunks)}" if doc.id else str(uuid.uuid4())
                 
                 # Create a new document for the chunk
@@ -65,7 +70,8 @@ class TextSplitter(DocumentProcessor):
                     metadata={
                         **doc.metadata,
                         "chunk_index": len(chunks),
-                        "parent_id": doc.id or "unknown"
+                        "parent_id": doc.id or "unknown",
+                        "token_count": len(chunk_tokens)
                     },
                     id=chunk_id
                 )
@@ -73,7 +79,11 @@ class TextSplitter(DocumentProcessor):
                 chunks.append(chunk_doc)
                 
                 # Move to next chunk with overlap
-                start = end - self.chunk_overlap
+                start_token += max(1, self.chunk_size - self.chunk_overlap)
+                
+                # Safety check - break if we're not making progress
+                if end_token == len(tokens):
+                    break
             
             chunked_documents.extend(chunks)
         
