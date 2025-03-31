@@ -55,7 +55,7 @@ venv.bak/
 /data/
 *.db
 /chroma_db/
-
+mlruns/
 # But include package structure
 !rag_testing/
 !rag_testing/*/
