@@ -19,6 +19,7 @@ def create_embedding_config(
 ) -> RAGConfig:
     """Create a configuration for pure embedding-based retrieval."""
     return RAGConfig(
+        type="embedding",
         embedding=EmbeddingConfig(
             model_type=EmbeddingModelType.SENTENCE_TRANSFORMER,
             model_name=model_name
@@ -41,6 +42,7 @@ def create_hybrid_config(
 ) -> RAGConfig:
     """Create a configuration for hybrid embedding + TF-IDF retrieval."""
     return RAGConfig(
+        type="hybrid",
         embedding=EmbeddingConfig(
             model_type=EmbeddingModelType.SENTENCE_TRANSFORMER,
             model_name=model_name
@@ -60,6 +62,7 @@ def create_hybrid_config(
 def create_tfidf_config(top_k: int = 5) -> RAGConfig:
     """Create a configuration for pure TF-IDF retrieval."""
     return RAGConfig(
+        type="tfidf",
         retrieval=RetrievalConfig(
             strategy_type=RetrievalStrategyType.TFIDF,
             top_k=top_k
@@ -86,7 +89,17 @@ def get_experiment_config(
         "tfidf": create_tfidf_config
     }
     
-    if experiment_type not in config_factories:
+    if experiment_type not in config_factories and experiment_type != "rada":
         raise ValueError(f"Unknown experiment type: {experiment_type}")
     
-    return config_factories[experiment_type](**kwargs) 
+    if experiment_type == "rada":
+        return RAGConfig(
+            type="rada",
+            embedding={"model_name": kwargs.get("model_name", "all-MiniLM-L6-v2")},
+            vector_store={"type": "faiss"},
+            retrieval={"strategy": "rerank", "top_k": kwargs.get("top_k", 5)},
+            evaluation={"metrics": ["Recall", "Precision"]},
+            chunking={"chunk_size": kwargs.get("chunk_size", 200), "chunk_overlap": kwargs.get("chunk_overlap", 50)}
+        )
+
+    return config_factories[experiment_type](**kwargs)

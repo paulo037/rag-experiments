@@ -257,4 +257,10 @@ def create_pipeline_from_config(config: RAGConfig) -> RAGPipeline:
         evaluation_metrics=evaluation_metrics
     )
     
+        # pipeline RADA
+    if config.type == "rada":
+        from rag_testing.pipelines.rada_pipeline import create_rada_pipeline
+        return create_rada_pipeline(config)
+
+    
     return pipeline 

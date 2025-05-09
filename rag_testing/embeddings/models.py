@@ -152,23 +152,51 @@ class MockEmbedding(EmbeddingModel):
 
 
 def get_embedding_model(config: EmbeddingConfig) -> EmbeddingModel:
-    """
-    Factory function to get an embedding model based on configuration.
-    
-    Args:
-        config: Embedding model configuration
-        
-    Returns:
-        Configured embedding model
-    """
     model_type = config.model_type
     model_name = config.model_name
     model_kwargs = config.model_kwargs
-    
+
     if model_type == "sentence_transformer":
         return SentenceTransformerEmbedding(model_name=model_name, **model_kwargs)
     elif model_type == "mock":
         embedding_dim = model_kwargs.get("embedding_dim", 384)
         return MockEmbedding(embedding_dim=embedding_dim)
+    elif model_type == "combined":
+        from rag_testing.config.models import EmbeddingConfig  
+        submodels = [
+            get_embedding_model(sub_config)
+            for sub_config in config.models
+        ]
+        weights = config.weights
+        return CombinedEmbeddingModel(submodels, weights)
     else:
-        raise ValueError(f"Unsupported embedding model type: {model_type}") 
+        raise ValueError(f"Unsupported embedding model type: {model_type}")
+    
+
+class CombinedEmbeddingModel:
+    def __init__(self, models: List[Any], weights: Optional[List[float]] = None):
+        self.models = models
+        self.weights = weights or [1.0] * len(models)
+
+    def embed_query(self, query: str) -> List[float]:
+        embeddings = [model.embed_query(query) for model in self.models]
+        weighted = [
+            [e * w for e in emb]
+            for emb, w in zip(embeddings, self.weights)
+        ]
+        return [sum(values) / len(self.models) for values in zip(*weighted)]
+
+    def embed_documents(self, docs: List[str]) -> List[List[float]]:
+        all_embeddings = [model.embed_documents(docs) for model in self.models]
+        combined = []
+
+        for i in range(len(docs)):
+            # Para cada documento, combinar os embeddings dos modelos
+            weighted_doc_embs = [
+                [emb[i][d] * self.weights[m] for d in range(len(emb[i]))]
+                for m, emb in enumerate(all_embeddings)
+            ]
+            combined_doc = [sum(values) / len(self.models) for values in zip(*weighted_doc_embs)]
+            combined.append(combined_doc)
+
+        return combined

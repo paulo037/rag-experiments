@@ -70,6 +70,9 @@ class EvaluationConfig(BaseModel):
 
 class RAGConfig(BaseModel):
     """Configuration for the entire RAG pipeline."""
+    type: Optional[str] = Field(None, description="Type of RAG pipeline (e.g., 'rada', 'tfidf', 'embedding')")
+
+    
     embedding: Optional[EmbeddingConfig] = Field(None, description="Embedding model configuration")
     vector_store: Optional[VectorStoreConfig] = Field(None, description="Vector store configuration")
     retrieval: RetrievalConfig = Field(..., description="Retrieval strategy configuration")
@@ -108,3 +111,32 @@ class RAGConfig(BaseModel):
                 raise ValueError("Vector store configuration is required for hybrid retrieval")
         
         return v 
+    
+# Representa um modelo de embedding único
+class EmbeddingConfig(BaseModel):
+    model_type: str
+    model_name: Optional[str] = None
+    model_kwargs: Optional[Dict[str, Any]] = {}
+    models: Optional[List["EmbeddingConfig"]] = None  # para modelo combinado
+    weights: Optional[List[float]] = None
+
+    @validator("models", always=True)
+    def validate_combined_models(cls, v, values):
+        if values.get("model_type") == "combined":
+            if not v:
+                raise ValueError("Combined model type requires 'models' field")
+        return v
+
+EmbeddingConfig.update_forward_refs()
+
+# Representa múltiplos modelos com pesos
+class CombinedEmbeddingConfig(BaseModel):
+    models: List[EmbeddingConfig]
+    weights: Optional[List[float]] = None
+
+# Config principal do pipeline
+class RAGConfig(BaseModel):
+    embedding: Union[EmbeddingConfig, CombinedEmbeddingConfig]
+    vector_store: VectorStoreConfig
+    retrieval: RetrievalConfig
+    evaluation: Optional[EvaluationConfig] = None
