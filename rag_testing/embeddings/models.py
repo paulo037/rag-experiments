@@ -199,4 +199,4 @@ class CombinedEmbeddingModel:
             combined_doc = [sum(values) / len(self.models) for values in zip(*weighted_doc_embs)]
             combined.append(combined_doc)
 
-        return combined
+        return combined 
