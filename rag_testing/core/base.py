@@ -1,7 +1,8 @@
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional, Union
-import pandas as pd
 from pydantic import BaseModel, Field
+
+from rag_testing.config.models import RAGConfig
 
 
 class Document(BaseModel):
@@ -195,6 +196,7 @@ class EvaluationMetric(ABC):
 
 class RAGPipeline(ABC):
     """Interface for RAG pipelines."""
+    type: str = "base"
     
     @abstractmethod
     def index(self, documents: List[Document]) -> None:
@@ -255,3 +257,13 @@ class RAGPipeline(ABC):
             documents: Documents to ingest
         """
         self.index(documents) 
+
+    @classmethod
+    def build(self, config: RAGConfig) -> "RAGPipeline":
+        """
+        Build the pipeline from configuration.
+        
+        Args:
+            config: RAG configuration
+        """
+        pass
