@@ -1,6 +1,5 @@
-from typing import Dict, List, Any, Optional, Set, Callable
+from typing import List, Optional
 import numpy as np
-from collections import Counter
 
 from rag_testing.core.base import Document, EvaluationMetric
 

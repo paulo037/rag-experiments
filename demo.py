@@ -6,27 +6,14 @@ This script demonstrates the RAG testing framework by running
 the embedding + TF-IDF hybrid retrieval example.
 """
 
-import os
-import sys
 import argparse
-from typing import List, Dict, Any
 
-from rag_testing.core.base import Document, DocumentProcessor
 from rag_testing.config.models import (
-    RAGConfig,
-    EmbeddingConfig,
-    VectorStoreConfig,
-    RetrievalConfig,
-    EvaluationConfig,
-    DocumentProcessorConfig,
-    EmbeddingModelType,
-    VectorStoreType,
-    RetrievalStrategyType
+    DocumentProcessorConfig
 )
-from rag_testing.core.pipeline import create_pipeline_from_config, SimpleRAGPipeline
+from rag_testing.pipelines.pipeline import create_pipeline_from_config
 from rag_testing.data.processors import TextSplitter, TextCleaner, CompositeProcessor
 from rag_testing.examples.embedding_tfidf import (
-    run_embedding_tfidf_example,
     create_sample_documents,
     create_config
 )
@@ -154,15 +141,15 @@ def main():
         document_processor = CompositeProcessor(processors)
         pipeline.document_processor = document_processor
         
-        print(f"Document processing enabled:")
+        print("Document processing enabled:")
         print(f"  - Chunk size: {args.chunk_size}")
         print(f"  - Chunk overlap: {args.chunk_overlap}")
         if args.clean_text:
-            print(f"  - Text cleaning enabled")
+            print("  - Text cleaning enabled")
             if args.lowercase:
-                print(f"  - Lowercase conversion enabled")
+                print("  - Lowercase conversion enabled")
             if args.remove_urls:
-                print(f"  - URL removal enabled")
+                print("  - URL removal enabled")
     
     # Create and index documents
     print("Creating and indexing sample documents...")
@@ -215,7 +202,7 @@ def main():
         print("\nBenchmarking retrieval performance...")
         benchmark_results = pipeline.benchmark(test_queries)
         
-        print(f"\nBenchmark Results:")
+        print("\nBenchmark Results:")
         print(f"  Average retrieval time: {benchmark_results['avg_retrieval_time']*1000:.2f} ms")
         print(f"  Number of documents: {benchmark_results['num_documents']}")
         print(f"  Index time: {benchmark_results['index_time']:.2f} s")

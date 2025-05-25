@@ -1,5 +1,5 @@
 import re
-from typing import List, Dict, Any, Optional, Callable
+from typing import List, Dict, Any, Callable
 import uuid
 import tiktoken  # Added for token-level chunking
 

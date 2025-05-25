@@ -1,4 +1,4 @@
-from typing import Dict, List, Any, Optional, Union
+from typing import List, Any, Optional
 import numpy as np
 
 from rag_testing.core.base import Document, EmbeddingModel
@@ -162,7 +162,6 @@ def get_embedding_model(config: EmbeddingConfig) -> EmbeddingModel:
         embedding_dim = model_kwargs.get("embedding_dim", 384)
         return MockEmbedding(embedding_dim=embedding_dim)
     elif model_type == "combined":
-        from rag_testing.config.models import EmbeddingConfig  
         submodels = [
             get_embedding_model(sub_config)
             for sub_config in config.models

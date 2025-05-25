@@ -13,15 +13,11 @@ from rag_testing.config.models import (
     EmbeddingConfig,
     VectorStoreConfig,
     RetrievalConfig,
-    EvaluationConfig,
     EmbeddingModelType,
     VectorStoreType,
     RetrievalStrategyType
 )
-from rag_testing.core.pipeline import create_pipeline_from_config
-from rag_testing.embeddings.models import MockEmbedding
-from rag_testing.retrieval.vector_stores import ChromaVectorStore
-from rag_testing.retrieval.strategies import EmbeddingRetrieval, TfidfRetrieval, HybridRetrieval
+from rag_testing.pipelines.pipeline import create_pipeline_from_config
 
 
 class TestBasicPipeline(unittest.TestCase):

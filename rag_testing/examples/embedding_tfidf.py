@@ -4,11 +4,10 @@ Example implementation of a hybrid retrieval strategy using embeddings and TF-ID
 
 import os
 import json
-from typing import List, Dict, Any
-import pandas as pd
+from typing import List
 
 from rag_testing.core.base import Document
-from rag_testing.core.pipeline import SimpleRAGPipeline, create_pipeline_from_config
+from rag_testing.pipelines.pipeline import SimpleRAGPipeline, create_pipeline_from_config
 from rag_testing.config.models import (
     RAGConfig,
     EmbeddingConfig,
@@ -19,7 +18,6 @@ from rag_testing.config.models import (
     VectorStoreType,
     RetrievalStrategyType
 )
-from rag_testing.data.loaders import TextFileLoader, JsonLoader
 from rag_testing.data.processors import TextSplitter, TextCleaner, CompositeProcessor
 from rag_testing.embeddings.models import SentenceTransformerEmbedding
 from rag_testing.retrieval.vector_stores import ChromaVectorStore
@@ -192,7 +190,7 @@ def run_embedding_tfidf_example():
     print("\nBenchmarking retrieval performance...")
     benchmark_results = pipeline.benchmark(test_queries)
     
-    print(f"\nBenchmark Results:")
+    print("\nBenchmark Results:")
     print(f"  Average retrieval time: {benchmark_results['avg_retrieval_time']*1000:.2f} ms")
     print(f"  Number of documents: {benchmark_results['num_documents']}")
     print(f"  Index time: {benchmark_results['index_time']:.2f} s")
