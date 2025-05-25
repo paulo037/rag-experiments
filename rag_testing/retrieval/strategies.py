@@ -116,122 +116,94 @@ class TfidfRetrieval(RetrievalStrategy):
 
 class HybridRetrieval(RetrievalStrategy):
     """Hybrid retrieval strategy combining embeddings and TF-IDF."""
-    
+
     def __init__(self, 
                  embedding_model: EmbeddingModel, 
                  vector_store: VectorStore,
                  embedding_weight: float = 0.5,
-                 tfidf_weight: float = 0.5):
+                 tfidf_weight: float = 0.5,
+                 fusion_method: str = "sum"):  # soma ponderada
         """
         Initialize the hybrid retrieval strategy.
-        
+
         Args:
             embedding_model: Model to generate embeddings
             vector_store: Vector store for similarity search
             embedding_weight: Weight for embedding scores
             tfidf_weight: Weight for TF-IDF scores
+            fusion_method: Method for fusing scores: 'sum', 'mean', or 'max'
         """
         self.embedding_retrieval = EmbeddingRetrieval(embedding_model, vector_store)
         self.tfidf_retrieval = TfidfRetrieval()
         self.embedding_weight = embedding_weight
         self.tfidf_weight = tfidf_weight
+        self.fusion_method = fusion_method.lower()
         self.documents = []
-    
+
     def setup(self, documents: List[Document]) -> None:
-        """
-        Set up the retrieval strategy with documents.
-        
-        Args:
-            documents: List of documents for retrieval
-        """
         self.documents = documents
-        
-        # Set up both retrieval methods
         self.embedding_retrieval.setup(documents)
         self.tfidf_retrieval.setup(documents)
-    
+
     def retrieve(self, query: str, k: int = 5) -> List[Document]:
-        """
-        Retrieve documents relevant to a query using a hybrid approach.
-        
-        Args:
-            query: Query string
-            k: Number of documents to retrieve
-            
-        Returns:
-            List of retrieved documents
-        """
-        # Get results from both methods with more results to ensure enough overlap
         embedding_docs = self.embedding_retrieval.retrieve(query, k=k * 2)
         tfidf_docs = self.tfidf_retrieval.retrieve(query, k=k * 2)
-        
-        # Create dictionaries to track scores
+
         doc_scores = {}
-        
-        # Normalize and combine scores from embedding-based retrieval
+
         for doc in embedding_docs:
             doc_id = doc.id
-            # Convert distance to similarity (assuming cosine distance)
             embedding_score = 1.0 - doc.metadata.get("distance", 0.0)
-            
-            if doc_id not in doc_scores:
-                doc_scores[doc_id] = {
-                    "doc": doc,
-                    "embedding_score": embedding_score * self.embedding_weight,
-                    "tfidf_score": 0.0,
-                    "combined_score": 0.0
-                }
-            else:
-                doc_scores[doc_id]["embedding_score"] = embedding_score * self.embedding_weight
-        
-        # Add scores from TF-IDF retrieval
+            doc_scores[doc_id] = {
+                "doc": doc,
+                "embedding_score": embedding_score * self.embedding_weight,
+                "tfidf_score": 0.0,
+            }
+
         for doc in tfidf_docs:
             doc_id = doc.id
             tfidf_score = doc.metadata.get("similarity", 0.0)
-            
-            if doc_id not in doc_scores:
+            if doc_id in doc_scores:
+                doc_scores[doc_id]["tfidf_score"] = tfidf_score * self.tfidf_weight
+            else:
                 doc_scores[doc_id] = {
                     "doc": doc,
                     "embedding_score": 0.0,
                     "tfidf_score": tfidf_score * self.tfidf_weight,
-                    "combined_score": 0.0
                 }
+
+        # fusion method
+        for doc_id, entry in doc_scores.items():
+            if self.fusion_method == "sum":
+                entry["combined_score"] = entry["embedding_score"] + entry["tfidf_score"]
+            elif self.fusion_method == "mean":
+                entry["combined_score"] = (entry["embedding_score"] + entry["tfidf_score"]) / 2
+            elif self.fusion_method == "max":
+                entry["combined_score"] = max(entry["embedding_score"], entry["tfidf_score"])
             else:
-                doc_scores[doc_id]["tfidf_score"] = tfidf_score * self.tfidf_weight
-        
-        # Calculate combined scores
-        for doc_id in doc_scores:
-            entry = doc_scores[doc_id]
-            entry["combined_score"] = entry["embedding_score"] + entry["tfidf_score"]
-        
-        # Sort by combined score
+                raise ValueError(f"Unsupported fusion method: {self.fusion_method}")
+
         sorted_docs = sorted(
-            doc_scores.values(), 
-            key=lambda x: x["combined_score"], 
+            doc_scores.values(),
+            key=lambda x: x["combined_score"],
             reverse=True
         )[:k]
-        
-        # Create new documents with combined scores in metadata
+
         retrieved_docs = []
         for entry in sorted_docs:
             doc = entry["doc"]
-            
-            # Add scores to metadata
             metadata = {
                 **doc.metadata,
-                "embedding_score": entry["embedding_score"] / self.embedding_weight if self.embedding_weight > 0 else 0,
-                "tfidf_score": entry["tfidf_score"] / self.tfidf_weight if self.tfidf_weight > 0 else 0,
+                "embedding_score": entry["embedding_score"],
+                "tfidf_score": entry["tfidf_score"],
                 "combined_score": entry["combined_score"]
             }
-            
-            retrieved_doc = Document(
+            retrieved_docs.append(Document(
                 content=doc.content,
                 metadata=metadata,
                 id=doc.id
-            )
-            
-            retrieved_docs.append(retrieved_doc)
-        
+            ))
+
         return retrieved_docs
 
 
@@ -262,7 +234,8 @@ def get_retrieval_strategy(
             embedding_model, 
             vector_store,
             embedding_weight=config.embedding_weight,
-            tfidf_weight=config.tfidf_weight
-        )
+            tfidf_weight=config.tfidf_weight,
+            fusion_method=config.fusion_method  
+    )
     else:
         raise ValueError(f"Unsupported retrieval strategy type: {strategy_type}") 
