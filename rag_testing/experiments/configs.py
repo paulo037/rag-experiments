@@ -1,8 +1,3 @@
-"""
-Pipeline configuration factories for different experiment types.
-"""
-
-from typing import Dict, Any
 from rag_testing.config.models import (
     RAGConfig,
     EmbeddingConfig,
@@ -15,11 +10,12 @@ from rag_testing.config.models import (
 
 def create_embedding_config(
     model_name: str = "all-MiniLM-L6-v2",
-    top_k: int = 5
+    top_k: int = 5,
+    **kwargs
 ) -> RAGConfig:
     """Create a configuration for pure embedding-based retrieval."""
     return RAGConfig(
-        type="embedding",
+        type="simple",
         embedding=EmbeddingConfig(
             model_type=EmbeddingModelType.SENTENCE_TRANSFORMER,
             model_name=model_name
@@ -31,14 +27,19 @@ def create_embedding_config(
         retrieval=RetrievalConfig(
             strategy_type=RetrievalStrategyType.EMBEDDING,
             top_k=top_k
-        )
+        ),
+        document_processor=None,
+        evaluation=None,
+        name=None,
+        description="Embedding experiment"
     )
 
 def create_hybrid_config(
     model_name: str = "all-MiniLM-L6-v2",
     embedding_weight: float = 0.7,
     tfidf_weight: float = 0.3,
-    top_k: int = 5
+    top_k: int = 5,
+    **kwargs
 ) -> RAGConfig:
     """Create a configuration for hybrid embedding + TF-IDF retrieval."""
     return RAGConfig(
@@ -59,7 +60,10 @@ def create_hybrid_config(
         )
     )
 
-def create_tfidf_config(top_k: int = 5) -> RAGConfig:
+def create_tfidf_config(
+    top_k: int = 5,
+    **kwargs
+) -> RAGConfig:
     """Create a configuration for pure TF-IDF retrieval."""
     return RAGConfig(
         type="tfidf",
@@ -69,37 +73,40 @@ def create_tfidf_config(top_k: int = 5) -> RAGConfig:
         )
     )
 
-def get_experiment_config(
-    experiment_type: str,
+def create_rada_config(
+    model_name: str = "all-MiniLM-L6-v2",
+    top_k: int = 5,
+    chunk_size: int = 200,
+    chunk_overlap: int = 50,
     **kwargs
 ) -> RAGConfig:
-    """
-    Factory function to create a configuration for a specific experiment type.
-    
-    Args:
-        experiment_type: Type of experiment ('embedding', 'hybrid', or 'tfidf')
-        **kwargs: Additional configuration parameters
-        
-    Returns:
-        RAG configuration for the specified experiment type
-    """
+    return RAGConfig(
+            type="rada",
+            embedding=EmbeddingConfig(
+                model_type=EmbeddingModelType.SENTENCE_TRANSFORMER,
+                model_name=model_name
+            ),
+            vector_store=VectorStoreConfig(
+                store_type=VectorStoreType.CHROMA
+            ),
+            retrieval=RetrievalConfig(
+                strategy_type=RetrievalStrategyType.EMBEDDING,
+                top_k=top_k,
+            )
+        )
+
+def get_experiment_config(
+    config_type: str,
+    **kwargs
+) -> RAGConfig:
+
     config_factories = {
         "embedding": create_embedding_config,
         "hybrid": create_hybrid_config,
-        "tfidf": create_tfidf_config
+        "tfidf": create_tfidf_config,
+        "rada": create_rada_config
     }
     
-    if experiment_type not in config_factories and experiment_type != "rada":
-        raise ValueError(f"Unknown experiment type: {experiment_type}")
+    assert config_type in config_factories, f"Unknown experiment type: {config_type}"
     
-    if experiment_type == "rada":
-        return RAGConfig(
-            type="rada",
-            embedding={"model_name": kwargs.get("model_name", "all-MiniLM-L6-v2")},
-            vector_store={"type": "faiss"},
-            retrieval={"strategy": "rerank", "top_k": kwargs.get("top_k", 5)},
-            evaluation={"metrics": ["Recall", "Precision"]},
-            chunking={"chunk_size": kwargs.get("chunk_size", 200), "chunk_overlap": kwargs.get("chunk_overlap", 50)}
-        )
-
-    return config_factories[experiment_type](**kwargs)
+    return config_factories[config_type](**kwargs)
